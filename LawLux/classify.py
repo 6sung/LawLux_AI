@@ -13,4 +13,4 @@ class AIModule:
         with torch.no_grad():
             outputs = self.model(**inputs)
         predictions = torch.argmax(outputs.logits, dim=-1)
-        return "법률질문" if predictions.item() == 1 else "비법률질문"
+        return "법률질문" if predictions.item() == 1 else "법률에 관련한 질문이 아닙니다. 법률에 관한 질문 입력하세요."
