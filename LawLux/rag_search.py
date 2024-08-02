@@ -5,7 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch
 
 # Load data and model
-csv_path = r'C:/dev/python-model/merge_1_3_Deduplication.csv'
+csv_path = r'C:/dev/python-model/merge_1_3_Deduplication_index.csv'
 df = pd.read_csv(csv_path)
 df['전문'] = df['전문'].fillna('')
 
@@ -43,12 +43,14 @@ def search_query(query, top_k=5):
     query_embedding_cpu = query_embedding.cpu()
     chunk_embeddings_cpu = chunk_embeddings.cpu()
 
-    similarities = cosine_similarity(query_embedding_cpu, chunk_embeddings_cpu).flatten()
+    # Calculate cosine similarity
+    similarities = cosine_similarity(query_embedding_cpu, chunk_embeddings_cpu).flatten()  # Use flatten() instead of fla
 
+    # Get top indices
     top_indices = similarities.argsort()[-top_k:][::-1]
 
-    search_results = df.iloc[[chunk_to_doc[i] for i in top_indices]]
-    #search_results['유사도'] = similarities[top_indices]
-    search_results.loc[:, '유사도'] = similarities[top_indices]
+    # Get top search results
+    search_results = df.iloc[[chunk_to_doc[i] for i in top_indices]].copy()
+    search_results['유사도'] = similarities[top_indices]  # Ensure correct index
 
-    return search_results[['주문', '유사도']].to_dict(orient='records')
+    return search_results[['번호' , '주문' , '유사도']].to_dict(orient='records')
