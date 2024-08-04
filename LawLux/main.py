@@ -3,8 +3,8 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 from flask import Flask, request, render_template, jsonify
 from classify import AIModule
 from rag_search import search_query
-import json
 from rag_generate import generate_sentence
+#import json
 
 app = Flask(__name__)
 
