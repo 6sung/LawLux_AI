@@ -1,58 +1,51 @@
-import pandas as pd
-import re
-from transformers import AutoTokenizer, AutoModel
-from sklearn.metrics.pairwise import cosine_similarity
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import re
+import pandas as pd
 
-# Load data and model
-csv_path = r'C:/dev/python-model/merge_1_4_Deduplication_index.csv'
-df = pd.read_csv(csv_path)
-df['전문'] = df['전문'].fillna('')
-
-search_model_path = r'C:/dev/python-model/KoSimCSE'
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-tokenizer = AutoTokenizer.from_pretrained(search_model_path)
-model = AutoModel.from_pretrained(search_model_path)
-
-# Load chunk embeddings
-save_path = r'C:/dev/python-model/chunk_embeddings_1_4.pt'
-checkpoint = torch.load(save_path, map_location=torch.device('cpu'))
-chunk_embeddings = checkpoint['chunk_embeddings'].to(device)
-chunk_to_doc = checkpoint['chunk_to_doc']
+# Load model and tokenizer
+gen_model_name = r'C:/dev/python-model/llama-3-korean-bllossom-8b'
+gen_tokenizer = AutoTokenizer.from_pretrained(gen_model_name)
+gen_model = AutoModelForCausalLM.from_pretrained(gen_model_name, torch_dtype=torch.float16)
+gen_model = gen_model.to('cpu')
 
 
-def preprocess_text(text):
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^\w\s가-힣]', '', text)
-    text = text.lower()
-    return text
+def generate_sentence(search_results, new_case_info, max_length=1024, max_new_tokens=100):
+    # prompt = '''
+    #     현재 사건과 유사한 사건들 중 상위 5개의 사건의 판결 형량과 현재 사건과의 유사도를 참고하여 현재 사건에 대한 형량을 예측해 주세요. 결과는 형량만 출력하며, 설명은 필요 없습니다. 유사 사건의 출력도 필요 없고, 최종 예측 결과는 하나만 명확히 출력해 주세요. 형량은 다음 중 하나로 출력해 주세요:
+    #     - 무죄 (유죄가 아닐 경우)
+    #     - 유예
+    #     - 벌금
+    #     - 징역
+    # '''
+    #
+    # if isinstance(search_results, list):
+    #     search_results = pd.DataFrame(search_results)
+    #
+    # for i, row in search_results.iterrows():
+    #     prompt += f"유사 사건 {i + 1} (유사도: {row['유사도']:.2f}):\n{row['주문']}\n\n"
+    #
+    # prompt += f"현재 사건: {new_case_info}\n\n"
+    # prompt += "예상 형량:"
 
+    prompt = '서울시 날씨 알려줄래?'
+    inputs = gen_tokenizer(prompt, return_tensors="pt").to('cpu')
 
-def encode_text(text):
-    inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    cls_embedding = outputs.last_hidden_state.mean(dim=1).squeeze()
-    return cls_embedding
+    outputs = gen_model.generate(
+        **inputs,
+        max_new_tokens=max_new_tokens,
+        temperature=0.8,
+        pad_token_id=gen_tokenizer.eos_token_id
+    )
 
+    generated_text = gen_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    #expected_sentence = extract_expected_sentence(generated_text)
 
-def search_query(query, top_k=5):
-    query = preprocess_text(query)
-    query_embedding = encode_text(query).unsqueeze(0).to(device)
+    #return expected_sentence
 
-    query_embedding_cpu = query_embedding.cpu()
-    chunk_embeddings_cpu = chunk_embeddings.cpu()
-
-    # Calculate cosine similarity
-    similarities = cosine_similarity(query_embedding_cpu, chunk_embeddings_cpu).flatten()  # Use flatten() instead of fla
-
-    # Get top indices
-    top_indices = similarities.argsort()[-top_k:][::-1]
-
-    # Get top search results
-    search_results = df.iloc[[chunk_to_doc[i] for i in top_indices]].copy()
-    search_results['유사도'] = similarities[top_indices]  # Ensure correct index
-
-    search_results['전문'] = search_results['전문'].apply(lambda x: x[:90] + '...' if len(x) > 90 else x)
-
-    return search_results[['번호', '주문', '유사도', '전문']].to_dict(orient='records')
+    return generated_text
+def extract_expected_sentence(generated_text):
+    match = re.search(r'예상 형량:\s*(.*)', generated_text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return "예상 형량을 추출할 수 없습니다."
