@@ -1,10 +1,11 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+import json
+import base64
 from flask import Flask, request, render_template, jsonify, Response
 from classify import AIModule
 from rag_search import search_query
-import json
-#from rag_generate import generate_sentence
+from rag_generate import generate_sentence
 
 app = Flask(__name__)
 
@@ -18,26 +19,38 @@ def index():
 @app.route('/ai_service', methods=['POST'])
 def ai_service():
     try:
-        data = request.get_json(force=True)
-        message = data.get('message', '')
+        message = request.form.get('message', '')
         print(f"Received message: {message}")
+
+        file = request.files.get('file')
+        if file:
+            print(f"Received file: {file.filename}")
+            file_content = file.read()
+            file_base64 = base64.b64encode(file_content).decode('utf-8')
+            file_info = {
+                'filename': file.filename,
+                'filetype': file.content_type,
+                'filecontent': file_base64
+            }
+            #print(f"File info: {file_info}")
 
         query_classify = ai_module.predict(message)
         print(f"질문 분류 결과: {query_classify}")
 
+        response_messages = {}
         if query_classify == '법률질문':
             search_results = search_query(message)
-            print(search_results)
-            response_message = search_results
-            #new_case_info = message
-            #gen_sentence = generate_sentence(search_results, new_case_info)
-            #response_message = f"예상 형량: {gen_sentence}"
+            print(f"Search results: {search_results}")
+            new_case_info = message
+            gen_sentence = generate_sentence(search_results, new_case_info)
+            response_messages = {
+                'search_results': search_results,
+                'prompt': f"예상 형량: {gen_sentence}"
+            }
         else:
-            response_message = f"{query_classify}"
+            response_messages = {'message': f"{query_classify}"}
 
-        #return jsonify({'message' : search_results})
-        #return jsonify({'message': response_message})
-        response_json = json.dumps(response_message, ensure_ascii=False)  # ensure_ascii=False로 설정하여 한글이 깨지지 않도록 함
+        response_json = json.dumps(response_messages, ensure_ascii=False)
 
         return Response(response=response_json, status=200, mimetype='application/json; charset=utf-8')
 
@@ -54,4 +67,4 @@ def after_request(response):
     return response
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=5000, debug=False)
+    app.run(host='localhost', port=5000, debug=True)
