@@ -26,14 +26,20 @@ def ai_service():
         print(f"질문 분류 결과: {query_classify}")
 
         if query_classify == '법률질문':
-            search_results = search_query(message)
-            new_case_info = message
+            search_results = search_query(message) # query에서 검색된 결과
+            new_case_info = message # query
             gen_sentence = generate_sentence(search_results, new_case_info)
-            response_message = f"예상 형량: {gen_sentence}"
+            response_message = {
+                'sentence': gen_sentence['sentence'],
+                'reasons': gen_sentence['reasons'],
+                'analysis': gen_sentence['analysis'],
+                #'precedents': gen_sentence['precedents']
+            }
+            #response_message = f"예상 형량: {gen_sentence}"
         else:
-            response_message = f"{query_classify}"
+            response_message = {'message': query_classify}
 
-        return jsonify({'message': response_message})
+        return jsonify(response_message)
 
     except Exception as e:
         print(f"Error occurred: {str(e)}")

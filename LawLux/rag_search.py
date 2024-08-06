@@ -52,5 +52,6 @@ def search_query(query, top_k=5):
     # Get top search results
     search_results = df.iloc[[chunk_to_doc[i] for i in top_indices]].copy()
     search_results['유사도'] = similarities[top_indices]  # Ensure correct index
+    print(f'search_results : ', search_results[['번호', '주문', '유사도', '전문', '양형의 이유']].to_dict(orient='records'))
 
-    return search_results[['번호' , '주문' , '유사도']].to_dict(orient='records')
+    return search_results[['번호', '주문', '유사도', '전문', '양형의 이유']].to_dict(orient='records')
