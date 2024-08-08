@@ -55,4 +55,4 @@ def search_query(query, top_k=5):
 
     search_results['전문'] = search_results['전문'].apply(lambda x: x[:90] + '...' if len(x) > 90 else x)
 
-    return search_results[['번호', '주문', '유사도', '전문']].to_dict(orient='records')
+    return search_results[['번호','사건번호', '주문', '유사도','전문']].to_dict(orient='records')
