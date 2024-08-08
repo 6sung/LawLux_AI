@@ -4,10 +4,10 @@ from llama_cpp import Llama
 
 # Load the generator model
 generator_model_path = r'C:/dev/python-model/eeve/ggml-model-Q5_K_M.gguf'
-llama = Llama(model_path=generator_model_path)
+llama = Llama(model_path=generator_model_path, n_ctx=2048)
 
 
-def generate_text(prompt, max_new_tokens=150):
+def generate_text(prompt, max_new_tokens=256):
     response = llama(prompt, max_tokens=max_new_tokens, temperature=0.8)
     generated_text = response['choices'][0]['text']
     print(f"Generated Text:", generated_text)  # 생성된 텍스트 출력
@@ -24,25 +24,27 @@ def extract_expected_sentence(genesrated_text):
 
 def create_prompt(search_results, new_case_info):
     prompt = '''
-    현재 사건과 유사한 사건들 중 상위 5개의 사건의 판결 형량과 현재 사건과의 유사도를 참고하여 현재 사건에 대한 형량을 예측해 주세요. 
-    결과는 형량만 출력하며, 설명은 필요 없습니다. 유사 사건의 출력도 필요 없고, 최종 예측 결과는 하나만 명확히 출력해 주세요. 
-    형량은 다음 중 하나로 출력해 주세요:
+    아래 주어진 현재 사건과 유사도가 높은 사건들을 참고하여 현재 사건에 대한 형량을 예측해 주세요. 아래 주어진 사례들만 고려하세요. 외부 리소스는 사용하지 마세요.
+    유사도는 현재 사건과 유사한 정도, 주문에는 유사한 사건들의 형량, 전문에는 유사한 사건들의 당시 상황이 주어집니다.
+    예상 형량은 다음 중 하나로 출력해 주세요(XX강의 수강, 취업 제한 등 내용은 출력 필요 없습니다.):
     - 무죄 (유죄가 아닐 경우)
-    - 유예
-    - 벌금
-    - 징역
+    - 유예일 경우 형식 (징역 XX년/개월 집행유예 XX년/개월)
+    - 벌금일 경우 형식 XX원
+    - 징역일 경우 형식 (징역 XX년/개월)
+    
+    그리고 사용자의 현재 상태에 대한 간단한 법률적 조언도 출력해주세요.
     '''
 
     if isinstance(search_results, list):
         search_results = pd.DataFrame(search_results)
 
     for i, row in search_results.iterrows():
-        prompt += f"유사 사건 {i + 1} (유사도: {row['유사도']:.2f}):\n{row['주문']}\n\n"
+        prompt += f"유사 사건 {i + 1} (유사도: {row['유사도']:.2f}):\n{row['주문']}\n{row['전문']}\n\n"
 
     prompt += f"현재 사건: {new_case_info}\n\n"
-    gen_prompt = "예상 형량:"
+    prompt += "예상 형량:"
 
-    return gen_prompt
+    return prompt
 
 
 # def extract_expected_sentence(generated_text):
@@ -67,15 +69,15 @@ def create_prompt(search_results, new_case_info):
 #     return prompt
 
 
-def generate_sentence(search_results, new_case_info, max_new_tokens=100):
+def generate_sentence(search_results, new_case_info, max_new_tokens=512):
     prompt = create_prompt(search_results, new_case_info)
     generated_text = generate_text(prompt, max_new_tokens)
     expected_sentence = extract_expected_sentence(generated_text)
     print(f"Prompt: {prompt}")
     print(f"Generated Text: {generated_text}")
-    print(f"Extracted Sentence: {expected_sentence}")
-    return expected_sentence
-
+    #print(f"Extracted Sentence: {expected_sentence}")
+    #return expected_sentence
+    return generated_text
 
 # Example usage
 if __name__ == "__main__":
