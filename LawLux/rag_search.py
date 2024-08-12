@@ -5,7 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch
 
 # Load data and model
-csv_path = r'C:/dev/python-model/merge_1_4_Deduplication_index.csv'
+csv_path = r'C:/dev/python-model/merge_1_5_Deduplication_index.csv'
 df = pd.read_csv(csv_path)
 df['전문'] = df['전문'].fillna('')
 
@@ -15,7 +15,7 @@ tokenizer = AutoTokenizer.from_pretrained(search_model_path)
 model = AutoModel.from_pretrained(search_model_path)
 
 # Load chunk embeddings
-save_path = r'C:/dev/python-model/chunk_embeddings_1_4.pt'
+save_path = r'C:/dev/python-model/chunk_embeddings_1_5_128.pt'
 checkpoint = torch.load(save_path, map_location=torch.device('cpu'))
 chunk_embeddings = checkpoint['chunk_embeddings'].to(device)
 chunk_to_doc = checkpoint['chunk_to_doc']
