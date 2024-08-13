@@ -1,7 +1,8 @@
 import re
 import pandas as pd
 from llama_cpp import Llama
-from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
+#from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
+from transformers import BigBirdForCausalLM, BigBirdTokenizer
 
 # Load the generator model
 #generator_model_path = r'D:/dev/python-model/qwen/qwen2-7b-instruct-q5_k_m.gguf' # qwen
@@ -10,22 +11,41 @@ generator_model_path = r'C:/dev/python-model/eeve/ggml-model-Q5_K_M.gguf' # eeve
 llama = Llama(model_path=generator_model_path, n_ctx=4096)
 
 # Load KoBART model and tokenizer - 요약
-kobart_model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-summarization')
-kobart_tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-summarization')
+# kobart_model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-summarization')
+# kobart_tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-summarization')
+
+# BigBird 모델과 토크나이저 불러오기
+tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
+model = BigBirdForCausalLM.from_pretrained('google/bigbird-roberta-base')
 
 # KoBART 요약 함수
-def summarize_text(text, max_length=1024, min_length=300, length_penalty=2.0):
-    inputs = kobart_tokenizer([text], max_length=1024, return_tensors='pt', truncation=True)
-    summary_ids = kobart_model.generate(
+# def summarize_text(text, max_length=1024, min_length=300, length_penalty=2.0):
+#     inputs = kobart_tokenizer([text], max_length=1024, return_tensors='pt', truncation=True)
+#     summary_ids = kobart_model.generate(
+#         inputs['input_ids'],
+#         num_beams=8,
+#         max_length=max_length,
+#         min_length=min_length,  # 최소 요약 길이를 300으로 증가
+#         length_penalty=length_penalty,
+#         early_stopping=True
+#     )
+#     summary = kobart_tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+#     return summary
+
+# bigbird 요약 함수
+def summarize_with_bigbird(text, max_new_tokens=512, min_length=300, length_penalty=2.0):
+    inputs = tokenizer([text], max_length=4096, return_tensors='pt', truncation=True)
+    summary_ids = model.generate(
         inputs['input_ids'],
         num_beams=8,
-        max_length=max_length,
-        min_length=min_length,  # 최소 요약 길이를 300으로 증가
+        max_new_tokens=max_new_tokens,
+        min_length=min_length,
         length_penalty=length_penalty,
         early_stopping=True
     )
-    summary = kobart_tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
     return summary
+
 
 # 2. Llama 모델 로드 및 텍스트 생성
 def generate_text(prompt, max_new_tokens=256):
@@ -70,8 +90,8 @@ def create_prompt(search_results, new_case_info):
 
     for i, row in search_results.iterrows():
         print(f'===원래 전문 길이 : ', len(row['전문']))
-        print(f'===요약 전문 길이 : ', len(summarize_text(row['전문'])))
-        prompt += f"유사 사건 {i + 1} (유사도: {row['유사도']:.2f}):\n{row['주문']}\n{summarize_text(row['전문'])}\n"
+        print(f'===요약 전문 길이 : ', len(summarize_with_bigbird(row['전문'])))
+        prompt += f"유사 사건 {i + 1} (유사도: {row['유사도']:.2f}):\n{row['주문']}\n{summarize_with_bigbird(row['전문'])}\n"
     prompt += f"현재 사건: {new_case_info}\n\n"
     prompt += "예상 형량:"
 
