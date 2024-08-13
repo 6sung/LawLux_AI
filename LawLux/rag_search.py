@@ -7,7 +7,7 @@ import torch
 # Load data and model
 csv_path = r'C:/dev/python-model/merge_1_6_Deduplication_cleaned_index.csv'
 df = pd.read_csv(csv_path)
-df['전문'] = df['전문'].fillna('')
+#df['전문'] = df['전문'].fillna('')
 
 search_model_path = r'C:/dev/python-model/KoSimCSE'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -58,4 +58,4 @@ def search_query(query, top_k=5):
     # Replace NaN values in '양형의 이유' with empty string
     search_results['양형의 이유'] = search_results['양형의 이유'].fillna('')
 
-    return search_results[['사건번호', '주문', '유사도','전문','양형의 이유']].to_dict(orient='records')
+    return search_results[['사건번호', '주문', '유사도', '양형의 이유']].to_dict(orient='records')

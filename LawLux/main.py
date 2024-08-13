@@ -66,13 +66,14 @@ def ai_service():
             #     'search_results': search_results,
             #     'prompt': f"예상 형량: {gen_sentence}"
             # }
-            def truncate_text(text, max_length=100):
-                if isinstance(text, str):
-                    return text[:max_length] + ('...' if len(text) > max_length else '')
-                return text
 
-            for result in search_results:
-                result["전문"] = truncate_text(result["전문"])
+            # def truncate_text(text, max_length=100):
+            #     if isinstance(text, str):
+            #         return text[:max_length] + ('...' if len(text) > max_length else '')
+            #     return text
+
+            #for result in search_results:
+                #result["전문"] = truncate_text(result["전문"])
 
             response_messages = {
                 'search_results': search_results,
