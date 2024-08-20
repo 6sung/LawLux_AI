@@ -39,9 +39,9 @@ def ai_service():
 
             #print(f"File info: {file_info}")
             message = input_message
-            #ocr_message = ocr(file)
-            #print(ocr_message)
-            #message = input_message + ocr_message
+            ocr_message = ocr(file)
+            print(ocr_message)
+            message = input_message + ocr_message
             #message = input_message
         else:
             message = input_message
@@ -66,7 +66,7 @@ def ai_service():
             #     'search_results': search_results,
             #     'prompt': f"예상 형량: {gen_sentence}"
             # }
-            def truncate_text(text, max_length=100):
+            def truncate_text(text, max_length=160):
                 if isinstance(text, str):
                     return text[:max_length] + ('...' if len(text) > max_length else '')
                 return text
@@ -98,4 +98,5 @@ def after_request(response):
     return response
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=5000, debug=True)
+    app.run(host='localhost', port=5000)
+    #app.run(host='localhost', port=5000, debug=True)
