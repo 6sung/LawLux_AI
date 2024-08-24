@@ -1,93 +1,73 @@
 import os
-
 from clova_ocr import ocr
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import json
 import base64
-from flask import Flask, request, render_template, jsonify, Response
+from flask import Flask, request, render_template, jsonify, Response, stream_with_context
 from classify import AIModule
-from rag_search import search_query
-from rag_generate import generate_sentence
+from rag_search import hybrid_cc
+from rag_generate import generate_sentence_stream
 
 app = Flask(__name__)
-
 model_path = r'C:/dev/python-model/bert-kor-base-lawQA'
 ai_module = AIModule(model_path)
+
 
 @app.route('/')
 def index():
     return render_template('index.html', message='')
 
+
 @app.route('/ai_service', methods=['POST'])
 def ai_service():
-    try:
-        input_message = request.form.get('message', '')
-        print(f"Received message: {input_message}")
+    def generate():
+        try:
+            input_message = request.form.get('message', '')
+            print(f"Received message: {input_message}")
+            file = request.files.get('file')
+            if file:
+                print(f"Received file: {file.filename}")
+                file_content = file.read()
+                print(f"File size: {len(file_content)} bytes")
+                file.seek(0)  # 파일 포인터를 처음으로 되돌림
+                ocr_message = ocr(file)
+                print(ocr_message)
+                message = ocr_message + input_message
+            else:
+                message = input_message
+            print(message)
+            query_classify = ai_module.predict(message)
+            print(f"질문 분류 결과: {query_classify}")
 
-        file = request.files.get('file')
-        if file:
-            print(f"File size: {len(file.read())} bytes")
-            print(f"Received file: {file.filename}")
-            file_content = file.read()
-            file_base64 = base64.b64encode(file_content).decode('utf-8')
-            file_info = {
-                'filename': file.filename,
-                'filetype': file.content_type#,
-                #'filecontent': file_base64
-            }
+            if query_classify == '법률질문':
+                search_results = hybrid_cc(message)
+                print(f"Search results: {search_results}")
+                new_case_info = message
 
-            #print(f"File info: {file_info}")
-            message = input_message
-            ocr_message = ocr(file)
-            print(ocr_message)
-            message = input_message + ocr_message
-            #message = input_message
-        else:
-            message = input_message
+                def truncate_text(text, max_length=160):
+                    if isinstance(text, str):
+                        return text[:max_length] + ('...' if len(text) > max_length else '')
+                    return text
 
-        print(message)
-        query_classify = ai_module.predict(message)
-        print(f"질문 분류 결 과: {query_classify}")
+                for result in search_results:
+                    result["전문"] = truncate_text(result["전문"])
 
-        response_messages = {}
-        if query_classify == '법률질문':
-            search_results = search_query(message)
-            print(f"Search results: {search_results}")
-            new_case_info = message
-            gen_sentence = generate_sentence(search_results, new_case_info)
-            # response_search_results = [
-            #     {key: result[key] for key in result if key != '전문'}
-            #     for result in search_results
-            # ]
+                # 검색 결과 먼저 전송
+                yield json.dumps({'search_results': search_results}, ensure_ascii=False) + '\n'
 
-            # response_messages = {
-            #     #'search_results': response_search_results,
-            #     'search_results': search_results,
-            #     'prompt': f"예상 형량: {gen_sentence}"
-            # }
-            def truncate_text(text, max_length=160):
-                if isinstance(text, str):
-                    return text[:max_length] + ('...' if len(text) > max_length else '')
-                return text
+                # 생성 문장을 토큰 단위로 스트리밍
+                for token in generate_sentence_stream(search_results, new_case_info):
+                    yield json.dumps({'token': token}, ensure_ascii=False) + '\n'
+            else:
+                yield json.dumps({'message': f"{query_classify}"}, ensure_ascii=False) + '\n'
 
-            for result in search_results:
-                result["전문"] = truncate_text(result["전문"])
+        except Exception as e:
+            print(f"Error occurred: {str(e)}")
+            yield json.dumps({'error': str(e)}, ensure_ascii=False) + '\n'
 
-            response_messages = {
-                'search_results': search_results,
-                'prompt': f"예상 형량: {gen_sentence}"
-            }
-        else:
-            response_messages = {'message': f"{query_classify}"}
+    return Response(stream_with_context(generate()), mimetype='application/json')
 
-        response_json = json.dumps(response_messages, ensure_ascii=False)
-
-        return Response(response=response_json, status=200, mimetype='application/json; charset=utf-8')
-
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 @app.after_request
 def after_request(response):
@@ -97,6 +77,6 @@ def after_request(response):
     response.headers.add('Content-Type', 'application/json; charset=utf-8')
     return response
 
+
 if __name__ == '__main__':
     app.run(host='localhost', port=5000)
-    #app.run(host='localhost', port=5000, debug=True)
