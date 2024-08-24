@@ -5,8 +5,8 @@ class AIModule:
     def __init__(self, model_path):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.tokenizer = BertTokenizer.from_pretrained(model_path)
-        self.model = BertForSequenceClassification.from_pretrained(model_path)  # from_safetensors 제거
-        self.model.to(self.device)  # 모델을 디바이스로 이동
+        self.model = BertForSequenceClassification.from_pretrained(model_path)
+        self.model.to(self.device)
 
     def predict(self, query):
         inputs = self.tokenizer(query, return_tensors="pt", padding=True, truncation=True).to(self.device)
