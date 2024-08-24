@@ -17,14 +17,13 @@ import uuid
 import time
 import json
 
-api_url = ' '
-secret_key = ' '
+api_url = ''
+secret_key = ''
 
 def ocr(file):
-    file.seek(0)  # 파일 포인터를 처음으로 되돌리기
+    file.seek(0)
     file_content = file.read()
-    print(f"File size: {len(file_content)} bytes")  # 파일 크기 확인
-    file.seek(0)  # 파일 포인터를 다시 처음으로 되돌리기
+    file.seek(0)
 
     request_json = {
         'images': [
@@ -46,9 +45,6 @@ def ocr(file):
 
     headers = {'X-OCR-SECRET': secret_key}
     response = requests.post(api_url, headers=headers, data=payload, files=files)
-
-    # Print response text for debugging
-    print(response.text)
 
     try:
         data = json.loads(response.text)
