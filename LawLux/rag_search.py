@@ -2,15 +2,19 @@ import pandas as pd
 import re
 from transformers import AutoTokenizer, AutoModel
 from transformers import AutoModelForSequenceClassification
-from sklearn.metrics.pairwise import cosine_similarity
-import torch
 from kiwipiepy import Kiwi
+from rank_bm25 import BM25Okapi
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+import torch
 import pickle
 
 # Load data and model
 csv_path = r'C:/dev/python-model/merge_1_6_Deduplication_cleaned_index.csv'
 df = pd.read_csv(csv_path)
 df['전문'] = df['전문'].fillna('')
+df['양형의 이유'] = df['양형의 이유'].fillna('')
 
 search_model_path = r'C:/dev/python-model/KoSimCSE'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,18 +32,12 @@ bm25_path = r'C:/dev/python-model/bm25_model_1_6.pkl'
 with open(bm25_path, 'rb') as file:
     bm25_loaded = pickle.load(file)
 
-# Load Reranker model
-reranker_model_path = r"C:/dev/python-model/ko-reranker"
-reranker_model = AutoModelForSequenceClassification.from_pretrained(reranker_model_path).to(device)
-reranker_tokenizer = AutoTokenizer.from_pretrained(reranker_model_path)
-
+kiwi = Kiwi()
 def preprocess_text(text):
-    kiwi = Kiwi()
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^\w\s가-힣]', '', text)
-    text = ' '.join([morph[0] for morph in kiwi.tokenize(text)])
+    text=re.sub(r'\s+',' ', text)
+    text=re.sub(r'[^\w\s]', '', text)
+    text=' '.join([morph[0] for morph in kiwi.tokenize(text)])
     return text
-
 
 def encode_text(text):
     inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
@@ -48,45 +46,43 @@ def encode_text(text):
     cls_embedding = outputs.last_hidden_state.mean(dim=1).squeeze()
     return cls_embedding
 
+def min_max_normalization(scores):
+    min_score = np.min(scores)
+    max_score = np.max(scores)
+    return (scores - min_score) / (max_score - min_score)
 
-# Reranker 함수
-def rerank_documents(query, documents):
-    rerank_scores = []
 
-    for doc in documents:
-        inputs = reranker_tokenizer(query, doc, return_tensors='pt', truncation=True, padding=True).to(device)
-        with torch.no_grad():
-            outputs = reranker_model(**inputs)
-            # logits의 크기를 확인하여 이진 분류인지 확인
-            if outputs.logits.shape[1] == 1:
-                score = outputs.logits.sigmoid().cpu().numpy()[0][0]  # 이진 분류의 경우
-            else:
-                score = outputs.logits.softmax(dim=1).cpu().numpy()[0][1]  # 다중 클래스의 경우
-            rerank_scores.append(score)
-
-    return rerank_scores
-
-def search_query(query, top_k=5):
+def hybrid_cc(query, bm25_weight=0.26, cosine_weight=0.74, top_k=5):
+    # 쿼리 전처리
     query = preprocess_text(query)
     tokenized_query = query.split(" ")
+    query_embedding = encode_text(query).unsqueeze(0).to(device)
+    query_embedding_cpu = query_embedding.cpu()
+    chunk_embeddings_cpu = chunk_embeddings.cpu()
 
-    # BM25 점수 계산
     bm25_scores = bm25_loaded.get_scores(tokenized_query)
 
-    # 상위 K개 인덱스 선택
-    top_k = min(top_k, len(bm25_scores))  # top_k가 bm25_scores의 길이를 초과하지 않도록 조정
-    top_indices = bm25_scores.argsort()[-top_k:][::-1]
+    similarities = cosine_similarity(query_embedding_cpu,
+                                     chunk_embeddings_cpu).flatten()
+    doc_similarities = [0] * (chunk_to_doc[-1] + 1)
+    for i in range(len(chunk_to_doc)):
+        if doc_similarities[chunk_to_doc[i]] < similarities[i]:
+            doc_similarities[chunk_to_doc[i]] = similarities[i]
 
-    # Get top search results
+    normalized_bm25_scores = min_max_normalization(bm25_scores)
+    normalized_cosine_similarities = min_max_normalization(doc_similarities)
+
+    combined_scores = (bm25_weight * normalized_bm25_scores) + (cosine_weight * normalized_cosine_similarities)
+
+    top_k = min(top_k, len(combined_scores))
+    top_indices = combined_scores.argsort()[-top_k:][::-1]
+
     search_results = df.iloc[top_indices].copy()
-    search_results['유사도'] = bm25_scores[top_indices]  # BM25 점수 추가
+    search_results['bm25Score'] = bm25_scores[top_indices]
+    search_results['유사도'] = similarities[top_indices]
+    search_results['combinedScore'] = combined_scores[top_indices]
 
-    search_results['전문'] = search_results['전문'].apply(lambda x: x[:160] + '...' if len(x) > 160 else x)
+    search_results['전문'] = search_results['전문'].apply(lambda x: x[:120] + '...' if len(x) > 120 else x)
 
-    rerank_scores= rerank_documents(query, search_results['전문'].tolist())
-    search_results['리랭크'] = rerank_scores
-    search_results = search_results.sort_values(by='리랭크', ascending=False)
+    return search_results[['번호','사건번호', '주문','전문', '양형의 이유', 'bm25Score', '유사도', 'combinedScore']].to_dict(orient='records')
 
-    search_results['양형의 이유'] = search_results['양형의 이유'].fillna('')
-
-    return search_results[['번호','사건번호', '주문', '유사도','전문', '양형의 이유']].to_dict(orient='records')
