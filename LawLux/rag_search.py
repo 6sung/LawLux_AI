@@ -51,8 +51,7 @@ def min_max_normalization(scores):
     max_score = np.max(scores)
     return (scores - min_score) / (max_score - min_score)
 
-
-def hybrid_cc(query, bm25_weight=0.26, cosine_weight=0.74, top_k=5):
+def hybrid_cc(query, bm25_weight=0.26, cosine_weight=0.74, top_k=5, initial_top=10):
     # 쿼리 전처리
     query = preprocess_text(query)
     tokenized_query = query.split(" ")
@@ -74,8 +73,7 @@ def hybrid_cc(query, bm25_weight=0.26, cosine_weight=0.74, top_k=5):
 
     combined_scores = (bm25_weight * normalized_bm25_scores) + (cosine_weight * normalized_cosine_similarities)
 
-    top_k = min(top_k, len(combined_scores))
-    top_indices = combined_scores.argsort()[-top_k:][::-1]
+    top_indices = combined_scores.argsort()[-initial_top:][::-1]
 
     search_results = df.iloc[top_indices].copy()
     search_results['bm25Score'] = bm25_scores[top_indices]
@@ -84,5 +82,17 @@ def hybrid_cc(query, bm25_weight=0.26, cosine_weight=0.74, top_k=5):
 
     search_results['전문'] = search_results['전문'].apply(lambda x: x[:120] + '...' if len(x) > 120 else x)
 
-    return search_results[['번호','사건번호', '주문','전문', '양형의 이유', 'bm25Score', '유사도', 'combinedScore']].to_dict(orient='records')
+    seen_texts = set()
+    filtered_results = []
+    for _, row in search_results.iterrows():
+        if row['전문'] not in seen_texts:
+            seen_texts.add(row['전문'])
+            filtered_results.append(row)
 
+    filtered_results_df = pd.DataFrame(filtered_results)
+
+    filtered_results_df = filtered_results_df[filtered_results_df['combinedScore'] >= 0.5]
+
+    filtered_results_df = filtered_results_df.head(top_k)
+
+    return filtered_results_df[['번호', '사건번호', '주문', '전문', '양형의 이유', 'bm25Score', '유사도', 'combinedScore']].to_dict(orient='records')
